@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from telegram import Update, ReplyKeyboardMarkup
@@ -495,6 +496,19 @@ async def handle(u, c):
 async def make_admin_cmd(u, c):
     await make_admin(u, c)
 
+
+async def error_handler(update, context):
+    """Silently handle Conflict errors (duplicate bot instances); log others."""
+    from telegram.error import Conflict, NetworkError
+    err = context.error
+    if isinstance(err, Conflict):
+        logging.getLogger(__name__).info('Telegram Conflict: another instance running. Retrying...')
+        return
+    if isinstance(err, NetworkError):
+        logging.getLogger(__name__).warning('Network error: %s', err)
+        return
+    logging.getLogger(__name__).error('Unhandled error:', exc_info=err)
+
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -502,6 +516,7 @@ def main():
     app.add_handler(CommandHandler("addadmin", add_admin_cmd))
     app.add_handler(CommandHandler("deladmin", del_admin_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
+    app.add_error_handler(error_handler)
     print("✅ 考勤机器人已启动，保持窗口运行即可。")
     app.run_polling()
 
